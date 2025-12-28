@@ -11,7 +11,6 @@
       --text: #e9eefc;
       --muted: #a9b6d6;
       --border: rgba(233, 238, 252, 0.14);
-      --accent: #7aa2ff;
       --warn: #ffd27a;
     }
     * { box-sizing: border-box; }
@@ -24,7 +23,7 @@
     }
     .wrap { max-width: 920px; margin: 0 auto; }
     h1 { font-size: 28px; margin-bottom: 8px; }
-    p.sub { color: var(--muted); margin-bottom: 20px; }
+    p.sub { color: var(--muted); margin-bottom: 20px; line-height: 1.4; }
     .grid { display: grid; gap: 16px; }
     @media (min-width: 860px) { .grid { grid-template-columns: 1.1fr 0.9fr; } }
     .card {
@@ -50,15 +49,43 @@
       padding: 14px;
       margin-bottom: 12px;
     }
-    .kpiTitle { font-size: 12px; color: var(--muted); }
+    .kpiTitle { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
     .kpiValue { font-size: 22px; font-weight: 700; }
-    .kpiRange { font-size: 13px; color: var(--muted); }
+    .kpiRange { font-size: 13px; color: var(--muted); margin-top: 4px; }
     .punch {
       border-left: 3px solid var(--warn);
       padding: 10px 12px;
       background: rgba(255,210,122,0.08);
       border-radius: 12px;
       font-size: 14px;
+      line-height: 1.45;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 159, 28, 0.6);
+      background: linear-gradient(180deg, #ff9f1c, #ff7a18);
+      color: #1a1200;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover {
+      filter: brightness(1.05);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .tiny {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
     }
   </style>
 </head>
@@ -70,19 +97,21 @@
     <div class="grid">
       <div class="card">
         <h2>Inputs</h2>
+
         <div class="row two">
           <div>
-            <label>Leads not contacted recently</label>
-            <input id="leads" type="number" value="1000" />
+            <label for="leads">Leads not contacted recently</label>
+            <input id="leads" type="number" value="1000" min="0" step="1" />
           </div>
           <div>
-            <label>Days since last contact</label>
-            <input id="days" type="number" value="3" />
+            <label for="days">Days since last contact</label>
+            <input id="days" type="number" value="3" min="0" step="1" />
           </div>
         </div>
+
         <div class="row two">
           <div>
-            <label>Lead quality</label>
+            <label for="quality">Lead quality</label>
             <select id="quality">
               <option value="old">1+ Year Old (3–4%)</option>
               <option value="mid" selected>3-Day Old (10–12%)</option>
@@ -90,71 +119,269 @@
             </select>
           </div>
           <div>
-            <label>Business value per appointment ($)</label>
-            <input id="value" type="number" value="300" />
+            <label for="value">Business value per appointment ($)</label>
+            <input id="value" type="number" value="300" min="0" step="1" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="email">Email (to send results)</label>
+            <input id="email" type="email" placeholder="you@company.com" autocomplete="email" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <button id="sendEmailBtn" type="button">Send results to email</button>
+            <div class="tiny" id="status">Ready.</div>
+            <div class="tiny">This logs to your spreadsheet and opens your email app with the results filled in. It does not send automatically.</div>
           </div>
         </div>
       </div>
 
       <div class="card">
         <h2>Outputs</h2>
+
         <div class="kpiBox">
           <div class="kpiTitle">Missed appointments</div>
           <div class="kpiValue" id="apptExp">0</div>
           <div class="kpiRange" id="apptRange">Low 0 | High 0</div>
         </div>
+
         <div class="kpiBox">
           <div class="kpiTitle">Missed business value</div>
           <div class="kpiValue" id="valueExp">$0</div>
           <div class="kpiRange" id="valueRange">Low $0 | High $0</div>
         </div>
+
         <div class="punch" id="punch">Not contacting these leads is costing you $0.</div>
       </div>
     </div>
   </div>
 
   <script>
-    const rates = {
-      old: [0.03, 0.035, 0.04],
-      mid: [0.10, 0.11, 0.12],
-      fresh: [0.5, 0.5, 0.5]
-    };
+    // IMPORTANT: Wrap all logic so elements exist before we access them.
+    document.addEventListener('DOMContentLoaded', () => {
+      const rates = {
+        old: [0.03, 0.035, 0.04],
+        mid: [0.10, 0.11, 0.12],
+        fresh: [0.5, 0.5, 0.5]
+      };
 
-    const leads = document.getElementById('leads');
-    const quality = document.getElementById('quality');
-    const value = document.getElementById('value');
-    const apptExp = document.getElementById('apptExp');
-    const apptRange = document.getElementById('apptRange');
-    const valueExp = document.getElementById('valueExp');
-    const valueRange = document.getElementById('valueRange');
-    const punch = document.getElementById('punch');
+      const leadsEl = document.getElementById('leads');
+      const daysEl = document.getElementById('days');
+      const qualityEl = document.getElementById('quality');
+      const valueEl = document.getElementById('value');
+      const emailEl = document.getElementById('email');
 
-    function money(n) {
-      return '$' + Math.round(n).toLocaleString();
-    }
+      const apptExpEl = document.getElementById('apptExp');
+      const apptRangeEl = document.getElementById('apptRange');
+      const valueExpEl = document.getElementById('valueExp');
+      const valueRangeEl = document.getElementById('valueRange');
+      const punchEl = document.getElementById('punch');
+      const sendEmailBtn = document.getElementById('sendEmailBtn');
+      const statusEl = document.getElementById('status');
 
-    function calc() {
-      const l = Number(leads.value) || 0;
-      const v = Number(value.value) || 0;
-      const [lo, ex, hi] = rates[quality.value];
+      // If anything is missing, fail gracefully.
+      const required = [leadsEl, daysEl, qualityEl, valueEl, emailEl, apptExpEl, apptRangeEl, valueExpEl, valueRangeEl, punchEl, sendEmailBtn];
+      if (required.some(x => !x)) {
+        console.error('DLCR: Missing required DOM element(s).');
+        return;
+      }
 
-      const aLo = l * lo;
-      const aEx = l * ex;
-      const aHi = l * hi;
+      // Google Sheets Web App endpoint (Apps Script)
+      // NOTE: GitHub Pages + Apps Script sometimes requires a "simple" response. This script is designed for that.
+      const SHEET_URL = "https://script.google.com/macros/s/AKfycbw3GZekMBKcdg8LdIs_n3hL-kPLofZhb8oR3tMbSIhda6UFMFOpjVa5PwrFjmS-V7GB/exec";
 
-      const vLo = aLo * v;
-      const vEx = aEx * v;
-      const vHi = aHi * v;
+      function money(n) {
+        const safe = Number.isFinite(n) ? n : 0;
+        return '$' + Math.round(safe).toLocaleString();
+      }
 
-      apptExp.textContent = Math.round(aEx);
-      apptRange.textContent = `Low ${Math.round(aLo)} | High ${Math.round(aHi)}`;
-      valueExp.textContent = money(vEx);
-      valueRange.textContent = `Low ${money(vLo)} | High ${money(vHi)}`;
-      punch.textContent = `Not contacting these leads is costing you about ${money(vEx)} in business value.`;
-    }
+      function compute(leads, qualityKey, valuePerAppt) {
+        const [lo, ex, hi] = rates[qualityKey] || rates.mid;
+        const aLo = leads * lo;
+        const aEx = leads * ex;
+        const aHi = leads * hi;
+        const vLo = aLo * valuePerAppt;
+        const vEx = aEx * valuePerAppt;
+        const vHi = aHi * valuePerAppt;
+        return {
+          aLo, aEx, aHi,
+          vLo, vEx, vHi,
+          qualityLabel: qualityEl.options[qualityEl.selectedIndex].text
+        };
+      }
 
-    [leads, quality, value].forEach(el => el.addEventListener('input', calc));
-    calc();
+      function calcAndStore() {
+        const leads = Math.max(0, Number(leadsEl.value) || 0);
+        const valuePerAppt = Math.max(0, Number(valueEl.value) || 0);
+        const qualityKey = qualityEl.value;
+        const days = Math.max(0, Number(daysEl.value) || 0);
+
+        const r = compute(leads, qualityKey, valuePerAppt);
+
+        apptExpEl.textContent = Math.round(r.aEx);
+        apptRangeEl.textContent = `Low ${Math.round(r.aLo)} | High ${Math.round(r.aHi)}`;
+        valueExpEl.textContent = money(r.vEx);
+        valueRangeEl.textContent = `Low ${money(r.vLo)} | High ${money(r.vHi)}`;
+        punchEl.textContent = `Not contacting these leads is costing you about ${money(r.vEx)} in business value.`;
+
+        window.__dlcr = {
+          leads,
+          days,
+          quality: qualityEl.options[qualityEl.selectedIndex].text,
+          valuePerAppt,
+          missedApptsExpected: Math.round(r.aEx),
+          missedApptsLow: Math.round(r.aLo),
+          missedApptsHigh: Math.round(r.aHi),
+          missedValueExpected: Math.round(r.vEx),
+          missedValueLow: Math.round(r.vLo),
+          missedValueHigh: Math.round(r.vHi)
+        };
+      }
+
+      async function saveToSheet() {
+        const d = window.__dlcr || {};
+
+        // IMPORTANT: Use a "simple" form POST to avoid CORS/preflight issues on GitHub Pages.
+        // Apps Script will receive e.parameter fields reliably.
+        const form = new URLSearchParams({
+          email: (emailEl.value || '').trim(),
+          leads: String(d.leads ?? ''),
+          days: String(d.days ?? ''),
+          quality: String(d.quality ?? ''),
+          valuePerAppt: String(d.valuePerAppt ?? ''),
+          missedApptsExpected: String(d.missedApptsExpected ?? ''),
+          missedApptsLow: String(d.missedApptsLow ?? ''),
+          missedApptsHigh: String(d.missedApptsHigh ?? ''),
+          missedValueExpected: String(d.missedValueExpected ?? ''),
+          missedValueLow: String(d.missedValueLow ?? ''),
+          missedValueHigh: String(d.missedValueHigh ?? ''),
+          pageUrl: window.location.href
+        });
+
+        // We do not depend on reading the response.
+        await fetch(SHEET_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: form
+        });
+      }
+
+      function buildEmailBody() {
+        const d = window.__dlcr || {};
+
+        const missedValueExpected = Number(d.missedValueExpected) || 0;
+        const valuePerAppt = Number(d.valuePerAppt) || 0;
+
+        const weeklyLeakage = missedValueExpected / 4;
+        const dailyLeakage = missedValueExpected / 30;
+
+        const recovery10 = missedValueExpected * 0.10;
+        const recovery25 = missedValueExpected * 0.25;
+        const recovery40 = missedValueExpected * 0.40;
+
+        const breakevenAppointments = valuePerAppt > 0 ? Math.max(1, Math.ceil(recovery25 / valuePerAppt)) : null;
+
+        const lines = [
+          'Dead Lead Cash Recovery – Results',
+          '',
+          'Based on your inputs:',
+          `Leads not contacted recently: ${d.leads ?? ''}`,
+          `Days since last contact: ${d.days ?? ''}`,
+          `Lead quality: ${d.quality ?? ''}`,
+          `Business value per appointment: $${(d.valuePerAppt ?? '').toString()}`,
+          '',
+          `Expected missed appointments: ${d.missedApptsExpected ?? ''}`,
+          `Expected missed business value: $${(Number(d.missedValueExpected) || 0).toLocaleString()}`,
+          `Range: $${(Number(d.missedValueLow) || 0).toLocaleString()} – $${(Number(d.missedValueHigh) || 0).toLocaleString()}`,
+          '',
+          'What this means in practical terms:',
+          `• Approximate weekly leakage: $${Math.round(weeklyLeakage).toLocaleString()}`,
+          `• Approximate daily opportunity cost: $${Math.round(dailyLeakage).toLocaleString()}`,
+          '',
+          'Recovery scenarios (no increase in ad spend):',
+          `• 10% recovery ≈ $${Math.round(recovery10).toLocaleString()}`,
+          `• 25% recovery ≈ $${Math.round(recovery25).toLocaleString()}`,
+          `• 40% recovery ≈ $${Math.round(recovery40).toLocaleString()}`,
+          '',
+          breakevenAppointments ? `At $${Math.round(valuePerAppt).toLocaleString()} per appointment, 25% recovery is about ${breakevenAppointments} additional appointments.` : 'At your value per appointment, 25% recovery translates into just a few additional appointments.',
+          '',
+          'If you want to recover this value, start here:',
+          '1) Re-contact leads that are 3–14 days old first',
+          '2) Use SMS before calling',
+          '3) Limit attempts to 2–3, not 10',
+          '4) Track replies, not dials',
+          '',
+          'Benchmark context:',
+          'Teams that execute this well typically recover 10–30% of dormant lead value within 30 days.',
+          '',
+          'Note:',
+          'This estimate uses observed booking-rate ranges and will vary by industry and execution.'
+        ];
+
+        return lines.join('\n');
+      }
+
+      // Event wiring
+      [leadsEl, daysEl, qualityEl, valueEl].forEach(el => el.addEventListener('input', calcAndStore));
+
+      sendEmailBtn.addEventListener('click', async () => {
+        // Ensure we have the latest calculations before logging/email.
+        calcAndStore();
+
+        const to = (emailEl.value || '').trim();
+        if (!to) {
+          alert('Please enter an email address.');
+          emailEl.focus();
+          return;
+        }
+
+        sendEmailBtn.disabled = true;
+        if (statusEl) statusEl.textContent = 'Saving to sheet…';
+        try {
+          // Log first (best-effort). Even if it fails, still open email.
+          await saveToSheet();
+          if (statusEl) statusEl.textContent = 'Saved. Opening email…';
+        } catch (e) {
+          console.warn('Sheet logging failed:', e);
+          if (statusEl) statusEl.textContent = 'Could not confirm sheet save. Opening email anyway…';
+        } finally {
+          sendEmailBtn.disabled = false;
+          if (statusEl) statusEl.textContent = 'Ready.';
+        }
+
+        const subject = 'Dead Lead Cash Recovery Calculator Results';
+        const body = buildEmailBody();
+        const cc = 'jerry@obrienbiz.com';
+        const mailto = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(cc)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.location.href = mailto;
+      });
+
+      // Initial render
+      calcAndStore();
+
+      // Lightweight self-tests (console only). These do NOT affect UI.
+      (function runSelfTests() {
+        try {
+          const t1 = compute(1000, 'mid', 300);
+          console.assert(Math.round(t1.aEx) === 110, 'Test1: expected appts = 110');
+          console.assert(Math.round(t1.vEx) === 33000, 'Test1: expected value = 33000');
+
+          const t2 = compute(1000, 'old', 300);
+          console.assert(Math.round(t2.aLo) === 30, 'Test2: old low appts = 30');
+          console.assert(Math.round(t2.aHi) === 40, 'Test2: old high appts = 40');
+
+          const t3 = compute(200, 'fresh', 500);
+          console.assert(Math.round(t3.aEx) === 100, 'Test3: fresh appts = 100');
+          console.assert(Math.round(t3.vEx) === 50000, 'Test3: fresh value = 50000');
+        } catch (e) {
+          console.warn('DLCR self-tests failed:', e);
+        }
+      })();
+    });
   </script>
 </body>
 </html>
