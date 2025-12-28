@@ -133,9 +133,9 @@
 
         <div class="row">
           <div>
-            <button id="sendEmailBtn" type="button">Send results to email</button>
+            <button id="sendEmailBtn" type="button">Email this breakdown</button>
             <div class="tiny" id="status">Ready.</div>
-            <div class="tiny">This logs to your spreadsheet and opens your email app with the results filled in. It does not send automatically.</div>
+            <div class="tiny">Get a clear, quantified breakdown you can review or forward internally.</div>
           </div>
         </div>
       </div>
@@ -328,8 +328,11 @@
       // Event wiring
       [leadsEl, daysEl, qualityEl, valueEl].forEach(el => el.addEventListener('input', calcAndStore));
 
-      sendEmailBtn.addEventListener('click', async () => {
-        // Ensure we have the latest calculations before logging/email.
+      sendEmailBtn.addEventListener('click', () => {
+        // IMPORTANT: Do NOT await before mailto.
+        // Awaiting breaks the browser's user-gesture context and blocks mailto.
+
+        // Ensure we have the latest calculations
         calcAndStore();
 
         const to = (emailEl.value || '').trim();
@@ -339,25 +342,25 @@
           return;
         }
 
-        sendEmailBtn.disabled = true;
-        if (statusEl) statusEl.textContent = 'Saving to sheet…';
+        if (statusEl) statusEl.textContent = 'Saving to sheet & opening email…';
+
+        // Fire-and-forget sheet logging (no await)
         try {
-          // Log first (best-effort). Even if it fails, still open email.
-          await saveToSheet();
-          if (statusEl) statusEl.textContent = 'Saved. Opening email…';
+          saveToSheet();
         } catch (e) {
           console.warn('Sheet logging failed:', e);
-          if (statusEl) statusEl.textContent = 'Could not confirm sheet save. Opening email anyway…';
-        } finally {
-          sendEmailBtn.disabled = false;
-          if (statusEl) statusEl.textContent = 'Ready.';
         }
 
-        const subject = 'Dead Lead Cash Recovery Calculator Results';
+        const subject = 'Dead Lead Cash Recovery – Results';
         const body = buildEmailBody();
         const cc = 'jerry@obrienbiz.com';
         const mailto = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(cc)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+        // This MUST be synchronous with the click to avoid popup blocking
         window.location.href = mailto;
+
+        if (statusEl) statusEl.textContent = 'Email opened. Logged in background.';
+      });
       });
 
       // Initial render
