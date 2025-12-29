@@ -329,7 +329,18 @@
         const body = buildEmailBody();
         const cc = 'jerry@obrienbiz.com';
         const mailto = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(cc)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.location.href = mailto;
+
+        // Try to open in a new tab/window. Some browsers may still open the mail app in the same tab.
+        const a = document.createElement('a');
+        a.href = mailto;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        // Fallback if popup/tab opening is blocked
+        // window.location.href = mailto;
 
         if (statusEl) statusEl.textContent = 'Email opened. Logged in background.';
       });
